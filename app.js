@@ -8,6 +8,8 @@ const { default: mongoose } = require("mongoose")
 const session = require("express-session")
 const passport = require('passport')
 const passportLocalMongoose = require("passport-local-mongoose")
+const findOrCreate = require("mongoose-findorcreate")
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 
 const app = express()
@@ -29,11 +31,14 @@ monngoose.connect("mongodb://localhost:27017/userDB", { useNewUrlParser: true })
 
 const userSchema = new mongoose.Schema({
     email: String,
-    password: String
+    password: String,
+    googleId: String
 })
 
 
-userSchema.plugin(passportLocalMongoose)
+userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate)
+
 // const secret = process.env.SECRET
 // userSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] });
 
@@ -41,12 +46,41 @@ const User = new mongoose.model("user", userSchema)
 
 passport.use(User.createStrategy())
 
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser())
+passport.serializeUser(function (user, done) {
+    done(null, user);
+});
+
+passport.deserializeUser(function (user, done) {
+    User.findById(id, function (err, user) {
+        done(null, user);
+    })
+});
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "https://localhost:3000/auth/google/secrets",
+},
+    function (accessToken, refreshToken, profile, cb) {
+        User.findOrCreate({ googleId: profile.id }, function (err, user) {
+            return cb(err, user);
+        });
+    }
+));
 
 app.get('/', (req, res) => {
     res.render("home")
 })
+
+app.get('/auth/google',
+    passport.authenticate('google', { scope: ['profile'] }));
+
+app.get('/auth/google/secrets',
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    function (req, res) {
+        // Successful authentication, redirect secrets.
+        res.redirect('/secrets');
+    })
 
 app.get('/login', (req, res) => {
     res.render("login")
@@ -62,6 +96,11 @@ app.get('/secrets', (reg, res) => {
     } else {
         res.redirect('login')
     }
+})
+
+app.get('logout', (req, res) => {
+    req.logOut()
+    res.redirect("/")
 })
 
 app.post('/register', (req, res) => {
