@@ -32,7 +32,8 @@ monngoose.connect("mongodb://localhost:27017/userDB", { useNewUrlParser: true })
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: String
 })
 
 
@@ -90,13 +91,39 @@ app.get('/register', (req, res) => {
     res.render("register")
 })
 
+
+// new commits. submit button
 app.get('/secrets', (reg, res) => {
+    User.find({ "secret": { $ne: null } }).then((foundUsers) => {
+        if (foundUsers) {
+            res.render('secrets')
+        }
+    }).catch((err) => { console.error(err) })
+})
+
+
+app.get('/submit', (req, res) => {
     if (reg.isAuthenticated()) {
         res.render('secrets')
     } else {
         res.redirect('login')
     }
 })
+
+app.post('/submit', (req, res) => {
+    const submittedSecret = req.body.secret;
+
+    User.findById(req.user.id).then((foundUser) => {
+        if (foundUser) {
+            foundUser.secret = submittedSecret;
+            foundUser.save().then(() => { res.redirect('/secrets', { usersWithSecrets: foundUser }) })
+        }
+    }).catch((err) => {
+        console.error(err)
+    })
+})
+
+// end of commit
 
 app.get('logout', (req, res) => {
     req.logOut()
